@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./AuthPage.css";
+import { API } from "../config.js";
 
 export default function AuthPage({ onLoginSuccess }) {
   const [mode, setMode] = useState("login");
@@ -28,8 +29,8 @@ export default function AuthPage({ onLoginSuccess }) {
     try {
       const url =
         mode === "login"
-          ? "http://localhost/explorateur/backend/login.php"
-          : "http://localhost/explorateur/backend/register.php";
+          ? `${API}/login.php`
+          : `${API}/register.php`;
 
       const res = await fetch(url, {
         method: "POST",

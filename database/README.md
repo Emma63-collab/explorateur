@@ -1,45 +1,31 @@
-# Base de donnees du projet Explorateur
+# Base de données du projet Explorateur
 
-Ce dossier contient le modele SQL du projet et les migrations utiles pour aligner une base XAMPP existante.
+Ce dossier contient le schéma SQL du projet et une migration légère pour aligner une base existante.
 
 ## Fichiers
 
-- `schema.sql` : installation complete de la base `explorateur`.
-- `001_align_admin_and_roles.sql` : migration legere pour ajouter les roles et reinitialiser le compte de demonstration.
+- `schema.sql` : installation complète de la base `explorateur` (8 tables).
+- `001_align_admin_and_roles.sql` : migration légère pour les anciennes bases (obsolète si vous importez `schema.sql`).
 
-## Compte de demonstration
+## Compte de démonstration
 
 - Identifiant : `admin`
 - Mot de passe : `admin123`
-- Role : administrateur
+- Rôle : administrateur
 
-## Tables importantes
+## Tables
 
-`roles`
-: Liste les profils applicatifs. Pour la soutenance, elle permet d'expliquer la separation entre administrateur et utilisateur simple.
+| Table | Rôle |
+|-------|------|
+| `roles` | Profils applicatifs : admin (1), user/lecteur (2), editeur (3) |
+| `users` | Comptes, mots de passe hashés (bcrypt), statut et rôle |
+| `files` | Index métier des fichiers et dossiers (stockage physique dans `backend/uploads/`) |
+| `versions` | Historique des versions d'un fichier (fichiers dans `backend/versions/`) |
+| `historique` | Journal des actions (upload, suppression, renommage, admin…) |
+| `file_permissions` | Droits fins par utilisateur et par fichier |
+| `trash` | Corbeille : métadonnées des éléments supprimés (fichiers dans `backend/trash/`) |
+| `sessions` | Tokens de session (présente en base ; l'app utilise les sessions PHP natives) |
 
-`users`
-: Stocke les comptes, les mots de passe hashes et le role de chaque utilisateur.
+## Note sur les rôles
 
-`files`
-: Index metier des fichiers et dossiers geres par l'application. Le stockage physique reste dans `backend/uploads`, mais la table permet la recherche, les droits, les statistiques et l'audit.
-
-`versions`
-: Historique des anciennes versions d'un fichier. C'est utile pour justifier la restauration et la tracabilite.
-
-`historique`
-: Journal des actions : creation, suppression, renommage, upload, restauration, etc. C'est une table essentielle pour montrer que l'application est administrable.
-
-`file_permissions`
-: Droits fins par utilisateur et par fichier. Meme si toute l'interface n'exploite pas encore cette table, elle donne une base solide pour faire evoluer le projet vers le partage securise.
-
-## Ce que le jury doit comprendre
-
-Le projet ne se limite pas a afficher un dossier du serveur. Il pose les bases d'une vraie GED simple :
-
-- authentification et roles ;
-- gestion de fichiers et dossiers ;
-- corbeille et restauration ;
-- versions ;
-- historique d'administration ;
-- permissions fines preparant le partage documentaire.
+En base, le rôle id=2 s'appelle `user`. L'interface et le backend PHP l'affichent comme **lecteur** (`auth.php`, panneau admin).

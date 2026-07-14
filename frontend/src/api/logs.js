@@ -1,5 +1,7 @@
+import { API } from "../config.js";
+
 export async function fetchLogs() {
-  const res = await fetch("http://localhost/backend/logs.php", {
+  const res = await fetch(`${API}/logs.php`, {
     credentials: "include"
   })
   return await res.json()

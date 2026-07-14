@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../icons.jsx";
-
-const API = "http://localhost/explorateur/backend";
+import { API } from "../config.js";
 
 const EXT_COLORS = {
   pdf:"#ef4444", png:"#8b5cf6", jpg:"#8b5cf6", jpeg:"#8b5cf6",

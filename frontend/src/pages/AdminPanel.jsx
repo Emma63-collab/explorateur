@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../icons.jsx";
-
-const API = "http://localhost/explorateur/backend";
+import { API } from "../config.js";
 
 /* ── Helpers ── */
 function formatBytes(bytes) {

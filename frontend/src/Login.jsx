@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API } from "./config.js";
 
 export default function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState("");
@@ -14,7 +15,7 @@ export default function Login({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost/explorateur/backend/login.php", {
+      const res = await fetch(`${API}/login.php`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

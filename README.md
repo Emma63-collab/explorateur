@@ -26,12 +26,14 @@ Installe ces outils si ce n'est pas déjà fait :
 **Option A — Via Git :**
 ```bash
 git clone https://github.com/Emma63-collab/explorateur.git
-cd emms-files
+cd explorateur
 ```
 
 **Option B — Via ZIP :**
 1. Télécharge et extrais le ZIP
-2. Place le dossier `explorateur/` dans `C:\xampp\htdocs\`
+2. Place le dossier dans `C:\xampp\htdocs\`
+   - soit sous le nom `explorateur/` (recommandé)
+   - soit directement à la racine de `htdocs/` (adapter alors l’URL de l’API — voir plus bas)
 
 ---
 
@@ -53,7 +55,29 @@ cd emms-files
 
 ---
 
-### 4. Lancer le frontend
+### 4. Configurer l’URL de l’API (important)
+
+Le frontend ne contient **plus de chemin en dur** : l’URL du backend se règle dans **`frontend/.env`**.
+
+1. Copie le modèle s’il n’existe pas encore :
+```bash
+cd frontend
+copy .env.example .env
+```
+*(Sous Linux/Mac : `cp .env.example .env`)*
+
+2. Adapte `VITE_API_URL` selon ton installation XAMPP :
+
+| Situation | Valeur de `VITE_API_URL` |
+|-----------|--------------------------|
+| Dossier `htdocs/explorateur/`, Apache **port 80** (défaut classique) | `http://localhost/explorateur/backend` |
+| Dossier à la **racine** de `htdocs/`, Apache **port 8080** | `http://localhost:8080/backend` |
+| Racine `htdocs/`, Apache **port 80** | `http://localhost/backend` |
+| Dossier `explorateur/`, Apache **port 8080** | `http://localhost:8080/explorateur/backend` |
+
+> Après toute modification de `.env`, redémarre `npm run dev`.
+
+### 5. Lancer le frontend
 
 Ouvre un terminal dans le dossier `frontend/` :
 
@@ -69,9 +93,17 @@ VITE ready
 ➜ Local: http://localhost:5173/
 ```
 
----
+### Ports utilisés
 
-### 5. Se connecter
+| Service | Port par défaut | Où le changer |
+|---------|-----------------|---------------|
+| **Frontend (Vite)** | `5173` | `frontend/vite.config.js` → `server.port` |
+| **Backend (Apache/XAMPP)** | `80` (souvent `8080` selon la machine) | Panneau XAMPP / `httpd.conf` |
+| **MySQL** | `3306` | XAMPP |
+
+> Si Apache écoute sur le **port 8080**, l’API n’est **pas** sur `http://localhost/...` mais sur `http://localhost:8080/...`. Il faut alors mettre à jour `VITE_API_URL` dans `frontend/.env`.
+
+### 6. Se connecter
 
 Ouvre `http://localhost:5173` dans ton navigateur.
 
@@ -120,7 +152,10 @@ explorateur/
 │   └── admin_*.php
 │
 ├── 📁 frontend/                  ← Interface React.js (port 5173)
+│   ├── .env.example              ← Modèle de config API (à copier en .env)
+│   ├── .env                      ← URL de l'API (non versionné, local)
 │   ├── src/
+│   │   ├── config.js             ← Variable globale API (lit VITE_API_URL)
 │   │   ├── App.jsx               ← Explorateur principal
 │   │   ├── App.css               ← Styles + thème sombre
 │   │   ├── icons.jsx             ← Bibliothèque d'icônes SVG
@@ -136,6 +171,25 @@ explorateur/
 │
 └── 📁 database/
     └── schema.sql                ← ⭐ Script SQL à importer en premier
+```
+
+---
+
+## Configuration de l’API (frontend)
+
+Toute l’application React lit l’URL du backend via une **variable unique** :
+
+- Fichier : `frontend/.env` (copié depuis `frontend/.env.example`)
+- Variable : `VITE_API_URL`
+- Utilisation dans le code : `frontend/src/config.js` → `export const API`
+
+Il n’est **plus nécessaire** de chercher/remplacer `explorateur/` dans les fichiers source. Un seul réglage suffit pour adapter le projet à un autre dossier ou un autre port Apache.
+
+Exemple pour un collègue qui lance Apache sur le port **8080** à la racine de `htdocs` :
+
+```env
+VITE_API_URL=http://localhost:8080/backend
+VITE_BASE=/
 ```
 
 ---
@@ -194,13 +248,16 @@ Tu peux les définir dans un fichier `.env` à la racine du projet, ou modifier 
 
 ## Résolution des problèmes
 
-**❌ Page blanche après connexion**
+**❌ Page blanche après connexion / impossible de joindre l’API**
 → Vérifier que XAMPP tourne (Apache + MySQL démarrés)
-→ Vérifier que le dossier est dans `C:\xampp\htdocs\explorateur\`
+→ Vérifier `VITE_API_URL` dans `frontend/.env` (doit correspondre au dossier **et** au port Apache)
+→ Tester dans le navigateur l’URL de ton API + `/me.php`  
+  (ex. `http://localhost/explorateur/backend/me.php` ou `http://localhost:8080/backend/me.php`)
+→ Redémarrer `npm run dev` après modification du `.env`
 
 **❌ "Non connecté" ou erreur sur la prévisualisation**
 → Vérifier que Apache est démarré
-→ Tester `http://localhost/explorateur/backend/me.php` dans le navigateur
+→ Vérifier le port Apache (80 ou 8080) et `VITE_API_URL`
 
 **❌ Erreur lors de l'import SQL (limite d'index)**
 → Utiliser uniquement `database/schema.sql` (les anciens fichiers sont obsolètes)

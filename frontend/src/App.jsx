@@ -4,6 +4,7 @@ import AuthPage from "./pages/AuthPage";
 import AdminPanel from "./pages/AdminPanel";
 import Dashboard from "./pages/Dashboard";
 import { Icon, getFileIcon, getIconColor } from "./icons.jsx";
+import { API } from "./config.js";
 
 /* ── Hook thème ── */
 function useTheme() {
@@ -15,8 +16,6 @@ function useTheme() {
   const toggle = () => setTheme(t => t === "light" ? "dark" : "light");
   return [theme, toggle];
 }
-
-const API = "http://localhost/explorateur/backend";
 
 /* ─────────────────────────────────────────────
    HELPERS
@@ -697,21 +696,33 @@ function App() {
   };
 
   const restoreFromTrash = async (item) => {
-    const res  = await fetch(`${API}/trash_restore.php`, {
-      method:"POST", credentials:"include",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({ file:item.name, path:"." })
-    });
-    const data = await res.json();
-    if (data.success) {
-      showToast("Restauré", "success");
-      const r = await fetch(`${API}/trash_list.php`, { credentials:"include" });
-      const d = await r.json();
-      setFiles(d.files);
-    } else showToast(data.message, "error");
+    if (!item?.id) {
+      showToast("ID corbeille manquant", "error");
+      return;
+    }
+    try {
+      const res  = await fetch(`${API}/trash_restore.php`, {
+        method:"POST", credentials:"include",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ id: item.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Restauré", "success");
+        const r = await fetch(`${API}/trash_list.php`, { credentials:"include" });
+        const d = await r.json();
+        if (d.success) setFiles(d.files);
+      } else showToast(data.message || "Erreur restauration", "error");
+    } catch {
+      showToast("Erreur restauration", "error");
+    }
   };
 
   const deleteFromTrash = (item) => {
+    if (!item?.id) {
+      showToast("ID corbeille manquant", "error");
+      return;
+    }
     setConfirmModal({
       title: "Supprimer définitivement",
       message: `"${item.name}" sera supprimé de façon permanente.`,
@@ -719,18 +730,22 @@ function App() {
       danger: true,
       onConfirm: async () => {
         setConfirmModal(null);
-        const res  = await fetch(`${API}/trash_delete.php`, {
-          method:"POST", credentials:"include",
-          headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ file:item.name })
-        });
-        const data = await res.json();
-        if (data.success) {
-          showToast("Supprimé définitivement", "success");
-          const r = await fetch(`${API}/trash_list.php`, { credentials:"include" });
-          const d = await r.json();
-          setFiles(d.files);
-        } else showToast(data.message, "error");
+        try {
+          const res  = await fetch(`${API}/trash_delete.php`, {
+            method:"POST", credentials:"include",
+            headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({ id: item.id })
+          });
+          const data = await res.json();
+          if (data.success) {
+            showToast("Supprimé définitivement", "success");
+            const r = await fetch(`${API}/trash_list.php`, { credentials:"include" });
+            const d = await r.json();
+            if (d.success) setFiles(d.files);
+          } else showToast(data.message || "Erreur suppression", "error");
+        } catch {
+          showToast("Erreur suppression", "error");
+        }
       }
     });
   };
