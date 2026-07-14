@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+﻿import { useEffect, useState, useCallback, useRef } from "react";
 import "./App.css";
 import AuthPage from "./pages/AuthPage";
 import AdminPanel from "./pages/AdminPanel";
@@ -691,20 +691,38 @@ function App() {
     try {
       const res  = await fetch(`${API}/trash_list.php`, { credentials:"include" });
       const data = await res.json();
-      if (data.success) { setFiles(data.files); setCurrentPath("CORBEILLE"); showToast("Corbeille ouverte", "info"); }
+      if (data.success) {
+        setSearch("");
+        setSearchMode("local");
+        setSelectedItems([]);
+        setFiles(Array.isArray(data.files) ? data.files : []);
+        setCurrentPath("CORBEILLE");
+        showToast("Corbeille ouverte", "info");
+      } else {
+        showToast(data.message || "Erreur chargement corbeille", "error");
+      }
     } catch { showToast("Erreur chargement corbeille", "error"); }
   };
 
+  const trashPayload = (item) => ({
+    id: Number(item?.id) || 0,
+    file: item?.name || "",
+    name: item?.name || "",
+    trash_name: item?.trash_name || "",
+  });
+
   const restoreFromTrash = async (item) => {
-    if (!item?.id) {
-      showToast("ID corbeille manquant", "error");
+    const payload = trashPayload(item);
+    if (!payload.id && !payload.file && !payload.trash_name) {
+      showToast("Élément corbeille invalide", "error");
       return;
     }
     try {
-      const res  = await fetch(`${API}/trash_restore.php`, {
+      const qs = payload.id ? `?id=${payload.id}` : "";
+      const res  = await fetch(`${API}/trash_restore.php${qs}`, {
         method:"POST", credentials:"include",
         headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id: item.id })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.success) {
@@ -719,8 +737,9 @@ function App() {
   };
 
   const deleteFromTrash = (item) => {
-    if (!item?.id) {
-      showToast("ID corbeille manquant", "error");
+    const payload = trashPayload(item);
+    if (!payload.id && !payload.file && !payload.trash_name) {
+      showToast("Élément corbeille invalide", "error");
       return;
     }
     setConfirmModal({
@@ -731,10 +750,11 @@ function App() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const res  = await fetch(`${API}/trash_delete.php`, {
+          const qs = payload.id ? `?id=${payload.id}` : "";
+          const res  = await fetch(`${API}/trash_delete.php${qs}`, {
             method:"POST", credentials:"include",
             headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ id: item.id })
+            body: JSON.stringify(payload)
           });
           const data = await res.json();
           if (data.success) {
@@ -1105,15 +1125,30 @@ function App() {
 
                 {/* Actions rapides au survol */}
                 <div className="grid-card-actions" onClick={e => e.stopPropagation()}>
-                  {item.type !== "folder" && (
-                    <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openPreview(item)} title="Prévisualiser">
-                      <Icon name="eye" size={12}/>
-                    </button>
-                  )}
-                  {isEditeur && currentPath !== "CORBEILLE" && (
-                    <button className="btn btn-danger btn-icon btn-sm" onClick={() => deleteFile(item.name)} title="Supprimer">
-                      <Icon name="trash" size={12}/>
-                    </button>
+                  {currentPath === "CORBEILLE" ? (
+                    <>
+                      <button className="btn btn-ghost btn-icon btn-sm" onClick={() => restoreFromTrash(item)} title="Restaurer">
+                        <Icon name="restore" size={12}/>
+                      </button>
+                      {isAdmin && (
+                        <button className="btn btn-danger btn-icon btn-sm" onClick={() => deleteFromTrash(item)} title="Supprimer définitivement">
+                          <Icon name="trash" size={12}/>
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {item.type !== "folder" && (
+                        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => openPreview(item)} title="Prévisualiser">
+                          <Icon name="eye" size={12}/>
+                        </button>
+                      )}
+                      {isEditeur && (
+                        <button className="btn btn-danger btn-icon btn-sm" onClick={() => deleteFile(item.name)} title="Supprimer">
+                          <Icon name="trash" size={12}/>
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -1251,9 +1286,11 @@ function App() {
                         <button className="btn btn-sm" onClick={e => { e.stopPropagation(); restoreFromTrash(item); }} title="Restaurer">
                           <Icon name="restore" size={13}/> Restaurer
                         </button>
-                        <button className="btn btn-danger btn-sm" onClick={e => { e.stopPropagation(); deleteFromTrash(item); }} title="Supprimer définitivement">
-                          <Icon name="trash" size={13}/>
-                        </button>
+                        {isAdmin && (
+                          <button className="btn btn-danger btn-sm" onClick={e => { e.stopPropagation(); deleteFromTrash(item); }} title="Supprimer définitivement">
+                            <Icon name="trash" size={13}/>
+                          </button>
+                        )}
                       </>
                     ) : (
                       <>
@@ -1305,6 +1342,18 @@ function App() {
         >
           {contextMenu.item ? (
             <>
+              {currentPath === "CORBEILLE" && (
+                <>
+                  <button className="ctx-btn" onClick={() => { restoreFromTrash(contextMenu.item); setContextMenu(null); }}>
+                    <Icon name="restore" size={14}/> Restaurer
+                  </button>
+                  {isAdmin && (
+                    <button className="ctx-btn danger" onClick={() => { deleteFromTrash(contextMenu.item); setContextMenu(null); }}>
+                      <Icon name="trash" size={14}/> Supprimer définitivement
+                    </button>
+                  )}
+                </>
+              )}
               {currentPath !== "CORBEILLE" && (
                 <>
                   <button className="ctx-btn" onClick={() => { copyFiles(); setContextMenu(null); }}>
@@ -1333,7 +1382,7 @@ function App() {
                   </button>
                 </>
               )}
-              {isAdmin && (
+              {isAdmin && currentPath !== "CORBEILLE" && (
                 <>
                   <div className="context-menu-sep"/>
                   <button className="ctx-btn" onClick={() => {
@@ -1341,11 +1390,9 @@ function App() {
                   }}>
                     <Icon name="rename" size={14}/> Renommer
                   </button>
-                  {currentPath !== "CORBEILLE" && (
-                    <button className="ctx-btn danger" onClick={() => { deleteFile(contextMenu.item.name); setContextMenu(null); }}>
-                      <Icon name="trash" size={14}/> Supprimer
-                    </button>
-                  )}
+                  <button className="ctx-btn danger" onClick={() => { deleteFile(contextMenu.item.name); setContextMenu(null); }}>
+                    <Icon name="trash" size={14}/> Supprimer
+                  </button>
                 </>
               )}
             </>

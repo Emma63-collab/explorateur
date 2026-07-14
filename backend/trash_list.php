@@ -28,14 +28,16 @@ try {
     foreach ($rows as $row) {
         $fullPath = $trashDir . '/' . $row['trash_filename'];
         $files[] = [
-            'id'           => $row['id'],
-            'name'         => $row['original_name'],
-            'original_path'=> $row['original_path'],
-            'trash_name'   => $row['trash_filename'],
-            'deleted_at'   => $row['deleted_at'],
-            'deleted_by'   => $row['deleted_by_name'],
-            'size'         => file_exists($fullPath) ? filesize($fullPath) : null,
-            'exists'       => file_exists($fullPath),
+            'id'            => (int) $row['id'],
+            'name'          => $row['original_name'],
+            'type'          => 'file',
+            'original_path' => $row['original_path'],
+            'trash_name'    => $row['trash_filename'],
+            'deleted_at'    => $row['deleted_at'],
+            'deleted_by'    => $row['deleted_by_name'],
+            'size'          => file_exists($fullPath) ? filesize($fullPath) : null,
+            'modified'      => $row['deleted_at'] ? strtotime($row['deleted_at']) : null,
+            'exists'        => file_exists($fullPath),
         ];
     }
 

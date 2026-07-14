@@ -11,15 +11,63 @@ if (!isLoggedIn()) {
     exit;
 }
 
-$data    = json_decode(file_get_contents('php://input'), true);
-$trashId = (int)($data['id'] ?? 0);
+$raw  = file_get_contents('php://input');
+$data = json_decode($raw, true);
+if (!is_array($data)) {
+    $data = [];
+}
 
-if (!$trashId) {
-    echo json_encode(['success' => false, 'message' => 'ID invalide']);
+// Accepte id depuis JSON, formulaire POST ou query string
+$trashId = (int)(
+    $data['id']
+    ?? $data['trash_id']
+    ?? $_POST['id']
+    ?? $_GET['id']
+    ?? 0
+);
+
+// Repli : retrouver l'élément par nom / nom corbeille
+if ($trashId <= 0) {
+    $lookup = trim((string)(
+        $data['trash_name']
+        ?? $data['trash_filename']
+        ?? $data['file']
+        ?? $data['name']
+        ?? $_POST['file']
+        ?? ''
+    ));
+    if ($lookup !== '') {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT id FROM trash
+                WHERE restored = 0
+                  AND (trash_filename = ? OR original_name = ?)
+                ORDER BY id DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$lookup, $lookup]);
+            $found = $stmt->fetchColumn();
+            if ($found) {
+                $trashId = (int) $found;
+            }
+        } catch (PDOException $e) {
+            error_log('Erreur lookup trash restore : ' . $e->getMessage());
+        }
+    }
+}
+
+if ($trashId <= 0) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'ID invalide',
+        'debug'   => [
+            'raw_body' => $raw !== false ? substr($raw, 0, 200) : null,
+            'keys'     => array_keys($data),
+        ],
+    ]);
     exit;
 }
 
-// Récupérer les infos depuis la table trash
 try {
     $stmt = $pdo->prepare("SELECT * FROM trash WHERE id = ? AND restored = 0 LIMIT 1");
     $stmt->execute([$trashId]);
@@ -37,23 +85,28 @@ if (!$item) {
 $trashDir   = realpath(__DIR__ . '/trash');
 $uploadsDir = realpath(__DIR__ . '/uploads');
 
-$source  = realpath($trashDir . '/' . $item['trash_filename']);
-$destDir = $uploadsDir . '/' . $item['original_path'];
-
-// Sécurité chemin
-if (!$source || strpos($source, $trashDir) !== 0) {
-    echo json_encode(['success' => false, 'message' => 'Fichier corbeille invalide']);
+if (!$trashDir || !$uploadsDir) {
+    echo json_encode(['success' => false, 'message' => 'Dossiers système introuvables']);
     exit;
 }
 
-// Créer le dossier de destination si nécessaire
-if (!is_dir($destDir)) mkdir($destDir, 0755, true);
+$source  = realpath($trashDir . DIRECTORY_SEPARATOR . $item['trash_filename']);
+$destDir = $uploadsDir . DIRECTORY_SEPARATOR . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $item['original_path']);
 
-$destination = $destDir . '/' . $item['original_name'];
+if (!$source || strpos($source, $trashDir) !== 0) {
+    echo json_encode(['success' => false, 'message' => 'Fichier corbeille invalide ou déjà déplacé']);
+    exit;
+}
 
-// Éviter d'écraser un fichier existant
+if (!is_dir($destDir) && !mkdir($destDir, 0755, true) && !is_dir($destDir)) {
+    echo json_encode(['success' => false, 'message' => 'Impossible de créer le dossier destination']);
+    exit;
+}
+
+$destination = $destDir . DIRECTORY_SEPARATOR . $item['original_name'];
+
 if (file_exists($destination)) {
-    $destination = $destDir . '/' . time() . '_' . $item['original_name'];
+    $destination = $destDir . DIRECTORY_SEPARATOR . time() . '_' . $item['original_name'];
 }
 
 if (!rename($source, $destination)) {
@@ -61,7 +114,6 @@ if (!rename($source, $destination)) {
     exit;
 }
 
-// Mettre à jour la table trash
 try {
     $stmt = $pdo->prepare("UPDATE trash SET restored = 1, restored_at = NOW() WHERE id = ?");
     $stmt->execute([$trashId]);
@@ -69,7 +121,6 @@ try {
     error_log('Erreur update trash restore : ' . $e->getMessage());
 }
 
-// Réinsérer dans files
 try {
     $stmt = $pdo->prepare("
         INSERT INTO files (name, path, type, size, user_id, created_at)

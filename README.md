@@ -192,6 +192,11 @@ VITE_API_URL=http://localhost:8080/backend
 VITE_BASE=/
 ```
 
+> **Page blanche / `Loading failed for the module … /assets/…`**  
+> Le `VITE_BASE` du build ne correspond pas à l’URL Apache.  
+> Pour ce projet : `VITE_BASE=/explorateur/frontend/dist/` puis `npm run build`.  
+> En développement, préfère `npm run dev` → `http://localhost:5173` (pas le dossier `dist/`).
+
 ---
 
 ## Configuration de la base de données

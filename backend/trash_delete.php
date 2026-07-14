@@ -11,15 +11,60 @@ if (!isLoggedIn()) {
     exit;
 }
 
-$data    = json_decode(file_get_contents('php://input'), true);
-$trashId = (int)($data['id'] ?? 0);
+$raw  = file_get_contents('php://input');
+$data = json_decode($raw, true);
+if (!is_array($data)) {
+    $data = [];
+}
 
-if (!$trashId) {
-    echo json_encode(['success' => false, 'message' => 'ID invalide']);
+$trashId = (int)(
+    $data['id']
+    ?? $data['trash_id']
+    ?? $_POST['id']
+    ?? $_GET['id']
+    ?? 0
+);
+
+if ($trashId <= 0) {
+    $lookup = trim((string)(
+        $data['trash_name']
+        ?? $data['trash_filename']
+        ?? $data['file']
+        ?? $data['name']
+        ?? $_POST['file']
+        ?? ''
+    ));
+    if ($lookup !== '') {
+        try {
+            $stmt = $pdo->prepare("
+                SELECT id FROM trash
+                WHERE (trash_filename = ? OR original_name = ?)
+                ORDER BY id DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$lookup, $lookup]);
+            $found = $stmt->fetchColumn();
+            if ($found) {
+                $trashId = (int) $found;
+            }
+        } catch (PDOException $e) {
+            error_log('Erreur lookup trash delete : ' . $e->getMessage());
+        }
+    }
+}
+
+if ($trashId <= 0) {
+    echo json_encode([
+        'success' => false,
+        'message' => 'ID invalide',
+        'debug'   => [
+            'raw_body' => $raw !== false ? substr($raw, 0, 200) : null,
+            'keys'     => array_keys($data),
+        ],
+    ]);
     exit;
 }
 
-// Récupérer depuis la table trash
 try {
     $stmt = $pdo->prepare("SELECT * FROM trash WHERE id = ? LIMIT 1");
     $stmt->execute([$trashId]);
@@ -35,14 +80,13 @@ if (!$item) {
 }
 
 $trashDir = realpath(__DIR__ . '/trash');
-$target   = realpath($trashDir . '/' . $item['trash_filename']);
-
-// Sécurité chemin
-if ($target && strpos($target, $trashDir) === 0 && file_exists($target)) {
-    unlink($target);
+if ($trashDir) {
+    $target = realpath($trashDir . DIRECTORY_SEPARATOR . $item['trash_filename']);
+    if ($target && strpos($target, $trashDir) === 0 && file_exists($target)) {
+        unlink($target);
+    }
 }
 
-// Supprimer de la table trash
 try {
     $stmt = $pdo->prepare("DELETE FROM trash WHERE id = ?");
     $stmt->execute([$trashId]);
