@@ -4,7 +4,7 @@ import AuthPage from "./pages/AuthPage";
 import AdminPanel from "./pages/AdminPanel";
 import Dashboard from "./pages/Dashboard";
 import { Icon, getFileIcon, getIconColor } from "./icons.jsx";
-import { API } from "./config.js";
+import { api } from "./api/client.js";
 
 /* ── Hook thème ── */
 function useTheme() {
@@ -34,6 +34,13 @@ const formatDate = (ts) => {
     day:"2-digit", month:"2-digit", year:"numeric",
     hour:"2-digit", minute:"2-digit"
   });
+};
+
+const IMAGE_EXTS = ["png","jpg","jpeg","gif","webp","svg"];
+const isImageFile = (item) => {
+  if (item.type === "folder") return false;
+  const ext = item.name.split(".").pop().toLowerCase();
+  return IMAGE_EXTS.includes(ext);
 };
 
 const getFileTypeLabel = (item) => {
@@ -212,8 +219,7 @@ function App() {
   /* ── API ── */
   const fetchFiles = useCallback(async (path = currentPath) => {
     try {
-      const res  = await fetch(`${API}/files.php?path=${encodeURIComponent(path)}`, { credentials:"include" });
-      const data = await res.json();
+      const data = await api.getFiles(path);
       if (data.error) { setError(data.error); setFiles([]); return; }
       setFiles(data); setError(""); setSelectedItems([]);
     } catch { setError("Erreur chargement des fichiers"); }
@@ -223,8 +229,7 @@ function App() {
   useEffect(() => {
     (async () => {
       try {
-        const res  = await fetch(`${API}/me.php`, { credentials:"include" });
-        const data = await res.json();
+        const data = await api.me();
         if (data.connected) { setConnected(true); setUserRole(data.role); setUsername(data.username); }
         else setConnected(false);
       } catch { setConnected(false); }
@@ -232,6 +237,8 @@ function App() {
     })();
   }, []);
 
+  // L'effet ne doit se lancer qu'à la connexion : fetchFiles change avec le dossier courant.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (connected) fetchFiles("."); }, [connected]);
 
   /* ── Context menu close ── */
@@ -332,6 +339,8 @@ function App() {
     };
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
+  // Les valeurs dynamiques nécessaires sont couvertes par currentPath/isEditeur.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPath, isEditeur]);
 
   /* ── Global search ── */
@@ -339,16 +348,17 @@ function App() {
     if (searchMode !== "global" || !search.trim()) return;
     (async () => {
       try {
-        const res  = await fetch(`${API}/search.php?q=${encodeURIComponent(search)}`, { credentials:"include" });
-        const data = await res.json();
+        const data = await api.search(search);
         setFiles(data);
       } catch { showToast("Erreur recherche globale", "error"); }
     })();
+  // showToast est stable ; éviter de relancer une recherche à cause de son identité.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, searchMode]);
 
   /* ── Navigation ── */
   const logout = async () => {
-    await fetch(`${API}/logout.php`, { method:"POST", credentials:"include" });
+    await api.logout();
     setConnected(false); setUserRole(null); setUsername("");
   };
 
@@ -362,11 +372,11 @@ function App() {
     goTo(np);
   };
 
-  const goBack = useCallback(() => {
+  const goBack = () => {
     if (currentPath === "." || currentPath === "CORBEILLE") return;
     const parts = currentPath.split("/"); parts.pop();
     goTo(parts.length ? parts.join("/") : ".");
-  }, [currentPath]);
+  };
 
   const goToBreadcrumb = (index) => {
     if (currentPath === "CORBEILLE") return;
@@ -424,28 +434,15 @@ function App() {
   };
 
   /* ── Upload ── */
-  const uploadFileWithProgress = (file, path) => new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const fd  = new FormData();
-    fd.append("file", file);
-    fd.append("path", path);
+  const uploadFileWithProgress = (file, path) => {
     const id = Date.now() + file.name;
     setUploadingFiles(prev => [...prev, { id, name:file.name, progress:0 }]);
-    xhr.upload.onprogress = (ev) => {
-      if (ev.lengthComputable) {
-        const pct = Math.round((ev.loaded / ev.total) * 100);
-        setUploadingFiles(prev => prev.map(f => f.id === id ? {...f, progress:pct} : f));
-      }
-    };
-    xhr.onload = () => {
+    return api.upload(file, path, (pct) => {
+      setUploadingFiles(prev => prev.map(f => f.id === id ? {...f, progress:pct} : f));
+    }).finally(() => {
       setTimeout(() => setUploadingFiles(prev => prev.filter(f => f.id !== id)), 800);
-      resolve();
-    };
-    xhr.onerror = reject;
-    xhr.open("POST", `${API}/upload.php`);
-    xhr.withCredentials = true;
-    xhr.send(fd);
-  });
+    });
+  };
 
   const uploadMultipleFiles = async (files) => {
     for (const f of Array.from(files)) {
@@ -459,7 +456,7 @@ function App() {
   const processEntry = async (entry, relativePath = "") => {
     if (entry.isFile) {
       await new Promise(res => entry.file(async f => {
-        try { await uploadFileWithProgress(f, currentPath + "/" + relativePath); } catch {}
+        try { await uploadFileWithProgress(f, currentPath + "/" + relativePath); } catch { /* échec individuel déjà signalé par la barre de progression */ }
         res();
       }));
     } else if (entry.isDirectory) {
@@ -481,12 +478,7 @@ function App() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const res  = await fetch(`${API}/delete.php`, {
-            method:"POST", credentials:"include",
-            headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ file:name, path:currentPath })
-          });
-          const data = await res.json();
+          const data = await api.deleteFile(name, currentPath);
           if (data.success) { showToast("Supprimé", "success"); fetchFiles(); }
           else showToast(data.message, "error");
         } catch { showToast("Erreur réseau", "error"); }
@@ -504,12 +496,7 @@ function App() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const res  = await fetch(`${API}/delete_multiple.php`, {
-            method:"POST", credentials:"include",
-            headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ files: selectedItems.map(f => f.name), path:currentPath })
-          });
-          const data = await res.json();
+          const data = await api.deleteMultiple(selectedItems.map(f => f.name), currentPath);
           if (data.success) { showToast("Suppression effectuée", "success"); fetchFiles(); setSelectedItems([]); }
           else showToast(data.message, "error");
         } catch { showToast("Erreur réseau", "error"); }
@@ -521,12 +508,7 @@ function App() {
     if (!newName.trim()) return;
     setIsRenaming(true);
     try {
-      const res  = await fetch(`${API}/rename.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ oldName, newName, path:currentPath })
-      });
-      const data = await res.json();
+      const data = await api.rename(oldName, newName, currentPath);
       if (data.success) { showToast("Renommé", "success"); setEditingItem(null); setNewName(""); fetchFiles(); }
       else showToast(data.message, "error");
     } catch { showToast("Erreur réseau", "error"); }
@@ -549,12 +531,7 @@ function App() {
   const pasteFiles = useCallback(async () => {
     if (!clipboard.length) return;
     try {
-      const res  = await fetch(`${API}/paste.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ files:clipboard, targetPath:currentPath, mode:clipboardMode })
-      });
-      const data = await res.json();
+      const data = await api.paste(clipboard, currentPath, clipboardMode);
       if (data.success) {
         showToast(clipboardMode === "cut" ? "Déplacé" : "Copié", "success");
         setClipboard([]); setClipboardMode(null); fetchFiles();
@@ -569,12 +546,7 @@ function App() {
     if (draggedItem.name === targetFolder.name && draggedItem.path === currentPath) return;
     const targetPath = currentPath === "." ? targetFolder.name : `${currentPath}/${targetFolder.name}`;
     try {
-      const res  = await fetch(`${API}/paste.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ files:[draggedItem], targetPath, mode:"cut" })
-      });
-      const data = await res.json();
+      const data = await api.paste([draggedItem], targetPath, "cut");
       if (data.success) { showToast("Déplacé", "success"); fetchFiles(); }
       else showToast(data.message, "error");
     } catch { showToast("Erreur drag & drop", "error"); }
@@ -585,8 +557,7 @@ function App() {
   const openTextEditor = async (item) => {
     const fullPath = currentPath === "." ? item.name : `${currentPath}/${item.name}`;
     try {
-      const res  = await fetch(`${API}/read_file.php?path=${encodeURIComponent(fullPath)}`, { credentials:"include" });
-      const data = await res.json();
+      const data = await api.readFile(fullPath);
       if (!data.success) { showToast(data.message, "error"); return; }
       setTextFilePath(fullPath); setTextContent(data.content); setTextEditorOpen(true);
     } catch { showToast("Erreur ouverture", "error"); }
@@ -596,19 +567,14 @@ function App() {
     if (!textFilePath) return;
     setSavingText(true);
     try {
-      const res  = await fetch(`${API}/save_file.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ path:textFilePath, content:textContent })
-      });
-      const data = await res.json();
+      const data = await api.saveFile(textFilePath, textContent);
       if (data.success) { showToast("Sauvegardé", "success"); setTextEditorOpen(false); fetchFiles(); }
       else showToast(data.message, "error");
     } catch { showToast("Erreur sauvegarde", "error"); }
     finally { setSavingText(false); }
   };
 
-  const PREVIEWABLE = ["pdf","png","jpg","jpeg","gif","webp","svg","mp4","webm","mp3","ogg","wav","txt","md"];
+  const PREVIEWABLE = ["pdf","png","jpg","jpeg","gif","webp","mp4","webm","mp3","ogg","wav","txt","md"];
   const openPreview = (item) => {
     if (item.type === "folder") return;
     const ext = item.name.split(".").pop().toLowerCase();
@@ -632,12 +598,7 @@ function App() {
   const handleVersions = async (item) => {
     if (item.type === "folder") { showToast("Un dossier n'a pas de versions", "info"); return; }
     try {
-      const res  = await fetch(`${API}/versions.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ file:item.name, path:currentPath })
-      });
-      const data = await res.json();
+      const data = await api.listVersions(item.name, currentPath);
       if (!data.success) { showToast(data.message, "error"); return; }
       setVersions(data.versions); setVersionItem(item); setShowVersions(true);
     } catch { showToast("Erreur versions", "error"); }
@@ -652,12 +613,7 @@ function App() {
       onConfirm: async (name) => {
         setPromptModal(null);
         try {
-          const res  = await fetch(`${API}/create_folder.php`, {
-            method:"POST", credentials:"include",
-            headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ name, path:currentPath })
-          });
-          const data = await res.json();
+          const data = await api.createFolder(name, currentPath);
           if (data.success) { showToast("Dossier créé", "success"); fetchFiles(); }
           else showToast(data.message, "error");
         } catch { showToast("Erreur création dossier", "error"); }
@@ -673,12 +629,7 @@ function App() {
       onConfirm: async (name) => {
         setPromptModal(null);
         try {
-          const res  = await fetch(`${API}/create_file.php`, {
-            method:"POST", credentials:"include",
-            headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({ name, path:currentPath })
-          });
-          const data = await res.json();
+          const data = await api.createFile(name, currentPath);
           if (data.success) { showToast("Fichier créé", "success"); fetchFiles(); }
           else showToast(data.message, "error");
         } catch { showToast("Erreur création fichier", "error"); }
@@ -689,8 +640,7 @@ function App() {
   /* ── Corbeille ── */
   const openTrash = async () => {
     try {
-      const res  = await fetch(`${API}/trash_list.php`, { credentials:"include" });
-      const data = await res.json();
+      const data = await api.trashList();
       if (data.success) {
         setSearch("");
         setSearchMode("local");
@@ -718,17 +668,10 @@ function App() {
       return;
     }
     try {
-      const qs = payload.id ? `?id=${payload.id}` : "";
-      const res  = await fetch(`${API}/trash_restore.php${qs}`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(payload)
-      });
-      const data = await res.json();
+      const data = await api.trashRestore(payload);
       if (data.success) {
         showToast("Restauré", "success");
-        const r = await fetch(`${API}/trash_list.php`, { credentials:"include" });
-        const d = await r.json();
+        const d = await api.trashList();
         if (d.success) setFiles(d.files);
       } else showToast(data.message || "Erreur restauration", "error");
     } catch {
@@ -750,17 +693,10 @@ function App() {
       onConfirm: async () => {
         setConfirmModal(null);
         try {
-          const qs = payload.id ? `?id=${payload.id}` : "";
-          const res  = await fetch(`${API}/trash_delete.php${qs}`, {
-            method:"POST", credentials:"include",
-            headers:{"Content-Type":"application/json"},
-            body: JSON.stringify(payload)
-          });
-          const data = await res.json();
+          const data = await api.trashDelete(payload);
           if (data.success) {
             showToast("Supprimé définitivement", "success");
-            const r = await fetch(`${API}/trash_list.php`, { credentials:"include" });
-            const d = await r.json();
+            const d = await api.trashList();
             if (d.success) setFiles(d.files);
           } else showToast(data.message || "Erreur suppression", "error");
         } catch {
@@ -985,12 +921,7 @@ function App() {
               className="btn btn-sm"
               disabled={!selectedCount}
               onClick={async () => {
-                const res  = await fetch(`${API}/download_zip.php`, {
-                  method:"POST", credentials:"include",
-                  headers:{"Content-Type":"application/json"},
-                  body: JSON.stringify({ files:selectedItems })
-                });
-                const blob = await res.blob();
+                const blob = await api.downloadZip(selectedItems);
                 const url  = URL.createObjectURL(blob);
                 const a    = document.createElement("a");
                 a.href = url; a.download = "download.zip"; a.click();
@@ -1152,9 +1083,25 @@ function App() {
                   )}
                 </div>
 
-                {/* Icône */}
+                {/* Icône / miniature */}
                 <div className={`grid-card-icon${item.type === "folder" ? " folder-icon" : ""}`} style={{color: iconColor}}>
-                  <Icon name={iconName} size={28}/>
+                  {isImageFile(item) && currentPath !== "CORBEILLE" ? (
+                    <>
+                      <img
+                        className="grid-card-thumb"
+                        src={api.previewUrl(currentPath === "." ? item.name : `${currentPath}/${item.name}`)}
+                        alt=""
+                        loading="lazy"
+                        onError={e => {
+                          e.currentTarget.style.display = "none";
+                          e.currentTarget.nextElementSibling.style.display = "flex";
+                        }}
+                      />
+                      <span className="grid-card-thumb-fallback"><Icon name={iconName} size={28}/></span>
+                    </>
+                  ) : (
+                    <Icon name={iconName} size={28}/>
+                  )}
                 </div>
 
                 {/* Nom */}
@@ -1301,7 +1248,7 @@ function App() {
                             </button>
                             <a
                               className="btn btn-ghost btn-icon btn-sm"
-                              href={`${API}/download.php?path=${encodeURIComponent(currentPath)}&file=${encodeURIComponent(item.name)}`}
+                              href={api.downloadUrl(currentPath, item.name)}
                               download
                               onClick={e => e.stopPropagation()}
                               title="Télécharger"
@@ -1364,7 +1311,7 @@ function App() {
                   </button>
                   <div className="context-menu-sep"/>
                   <button className="ctx-btn" onClick={() => {
-                    window.open(`${API}/download.php?path=${encodeURIComponent(currentPath)}&file=${encodeURIComponent(contextMenu.item.name)}`,"_blank");
+                    window.open(api.downloadUrl(currentPath, contextMenu.item.name), "_blank");
                     setContextMenu(null);
                   }}>
                     <Icon name="download" size={14}/> Télécharger
@@ -1407,8 +1354,8 @@ function App() {
       {/* ── PREVIEW ── */}
       {previewFile && (() => {
         const ext = previewFile.split(".").pop().toLowerCase();
-        const url = `${API}/preview.php?path=${encodeURIComponent(previewFile)}`;
-        const isImg   = ["png","jpg","jpeg","gif","webp","svg"].includes(ext);
+        const url = api.previewUrl(previewFile);
+        const isImg   = ["png","jpg","jpeg","gif","webp"].includes(ext);
         const isVideo = ["mp4","webm"].includes(ext);
         const isAudio = ["mp3","ogg","wav"].includes(ext);
         const isPdf   = ext === "pdf";
@@ -1455,7 +1402,10 @@ function App() {
             )}
             <div style={{display:"flex",justifyContent:"flex-end",padding:"10px 0 0"}}>
               <a
-                href={`${API}/download.php?path=${encodeURIComponent(previewFile.includes("/") ? previewFile.substring(0,previewFile.lastIndexOf("/")) : ".")}&file=${encodeURIComponent(previewFile.split("/").pop())}`}
+                href={api.downloadUrl(
+                  previewFile.includes("/") ? previewFile.substring(0,previewFile.lastIndexOf("/")) : ".",
+                  previewFile.split("/").pop()
+                )}
                 className="btn btn-sm"
                 download
               >
@@ -1512,12 +1462,7 @@ function App() {
                       onConfirm: async () => {
                         setConfirmModal(null);
                         try {
-                          const res  = await fetch(`${API}/restore_version.php`, {
-                            method:"POST", credentials:"include",
-                            headers:{"Content-Type":"application/json"},
-                            body: JSON.stringify({ versionPath:v.versionPath, targetPath:v.targetPath })
-                          });
-                          const data = await res.json();
+                          const data = await api.restoreVersion(v.versionPath, v.targetPath);
                           if (data.success) { showToast("Version restaurée", "success"); setShowVersions(false); fetchFiles(); }
                           else showToast(data.message, "error");
                         } catch { showToast("Erreur restauration", "error"); }

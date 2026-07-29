@@ -18,11 +18,19 @@ if (!$oldName || !$newName) {
     exit;
 }
 
-$baseDir = realpath(__DIR__ . '/uploads');
-$oldFile = realpath($baseDir . '/' . $path . '/' . $oldName);
-$newFile = $baseDir . '/' . $path . '/' . $newName;
+// Un nom est un seul segment : ni chemin, ni dossier parent.
+if ($oldName !== basename($oldName) || $newName !== basename($newName)
+    || in_array($oldName, ['.', '..'], true) || in_array($newName, ['.', '..'], true)) {
+    echo json_encode(["success" => false, "message" => "Nom de fichier invalide"]);
+    exit;
+}
 
-if (!$oldFile || strpos($oldFile, $baseDir) !== 0) {
+$baseDir = realpath(__DIR__ . '/uploads');
+$targetDir = realpath($baseDir . '/' . $path);
+$oldFile = $targetDir ? realpath($targetDir . '/' . $oldName) : false;
+$newFile = $targetDir ? $targetDir . DIRECTORY_SEPARATOR . $newName : '';
+
+if (!$targetDir || strpos($targetDir, $baseDir) !== 0 || !$oldFile || strpos($oldFile, $baseDir) !== 0) {
     echo json_encode(["success" => false, "message" => "Accès interdit"]);
     exit;
 }

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"
-import { fetchLogs } from "../api/logs"
+import { api } from "../api/client.js"
 
 export default function AdminLogs() {
   const [logs, setLogs] = useState([])
 
   useEffect(() => {
-    fetchLogs().then(setLogs)
+    api.logs().then(setLogs)
   }, [])
 
   return (

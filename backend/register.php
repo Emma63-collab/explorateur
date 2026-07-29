@@ -6,10 +6,16 @@ require_once __DIR__ . '/config/database.php';
 $data = json_decode(file_get_contents('php://input'), true);
 
 $username = trim($data['username'] ?? '');
+$email    = trim($data['email'] ?? '');
 $password = trim($data['password'] ?? '');
 
-if ($username === '' || $password === '') {
+if ($username === '' || $email === '' || $password === '') {
     echo json_encode(['success' => false, 'message' => 'Champs manquants']);
+    exit;
+}
+
+if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254) {
+    echo json_encode(['success' => false, 'message' => 'Adresse e-mail invalide']);
     exit;
 }
 
@@ -24,11 +30,11 @@ if (strlen($password) < 8) {
 }
 
 // Vérifier si le nom existe déjà
-$stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? LIMIT 1");
-$stmt->execute([$username]);
+$stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1");
+$stmt->execute([$username, $email]);
 
 if ($stmt->fetch()) {
-    echo json_encode(['success' => false, 'message' => 'Ce nom d\'utilisateur est déjà pris']);
+    echo json_encode(['success' => false, 'message' => 'Ce nom d\'utilisateur ou cette adresse e-mail est déjà utilisé']);
     exit;
 }
 
@@ -37,10 +43,10 @@ $role_id = 2; // lecteur/user par défaut
 
 // Le compte est créé en "pending" — l'admin doit valider
 $stmt = $pdo->prepare(
-    "INSERT INTO users (username, password, role_id, status) VALUES (?, ?, ?, 'pending')"
+    "INSERT INTO users (username, email, password, role_id, status) VALUES (?, ?, ?, ?, 'pending')"
 );
 
-if ($stmt->execute([$username, $hashed, $role_id])) {
+if ($stmt->execute([$username, $email, $hashed, $role_id])) {
     echo json_encode([
         'success' => true,
         'pending' => true,

@@ -31,19 +31,14 @@ $allowed_mime_types = [
     // Texte
     'text/plain',
     'text/csv',
-    'text/html',
     'text/css',
-    'text/javascript',
     'application/json',
-    'application/xml',
-    'text/xml',
     'text/markdown',
     // Images
     'image/jpeg',
     'image/png',
     'image/gif',
     'image/webp',
-    'image/svg+xml',
     // Archives
     'application/zip',
     'application/x-zip-compressed',

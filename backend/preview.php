@@ -2,9 +2,7 @@
 // preview.php — sert les fichiers en inline sans forcer le téléchargement.
 // NE PAS inclure cors.php ici : on sert du binaire, pas du JSON.
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+require_once __DIR__ . '/config/session.php';
 
 if (!isset($_SESSION['user_id'])) {
     http_response_code(401);

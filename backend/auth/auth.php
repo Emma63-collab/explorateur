@@ -4,10 +4,7 @@
  * display_errors désactivé : les erreurs vont dans le log serveur, pas dans la réponse JSON.
  */
 
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-
+require_once __DIR__ . '/../config/session.php';
 require_once __DIR__ . '/../config/database.php';
 
 function isLoggedIn(): bool {

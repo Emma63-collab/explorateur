@@ -56,9 +56,15 @@ if (!$targetDir || strpos($targetDir, $baseDir) !== 0) {
    TRAITEMENT
 ========================== */
 foreach ($files as $file) {
+    $name = (string)($file['name'] ?? '');
+    $sourcePath = (string)($file['path'] ?? '');
+    if ($name === '' || $name !== basename($name) || in_array($name, ['.', '..'], true)) {
+        echo json_encode(["success" => false, "message" => "Nom de fichier invalide"]);
+        exit;
+    }
 
-    $source = realpath($baseDir . '/' . $file['path'] . '/' . $file['name']);
-    $dest = $targetDir . '/' . $file['name'];
+    $source = realpath($baseDir . '/' . $sourcePath . '/' . $name);
+    $dest = $targetDir . DIRECTORY_SEPARATOR . $name;
 
     if (!$source || strpos($source, $baseDir) !== 0) {
         continue;
@@ -74,12 +80,12 @@ foreach ($files as $file) {
 
     if ($mode === 'cut') {
         backupFile($source);
-        logAction($_SESSION['user_id'], "CUT", $file['path'] . "/" . $file['name'] . " -> " . $targetPath);
+        logAction($_SESSION['user_id'], "CUT", $sourcePath . "/" . $name . " -> " . $targetPath);
 
         rename($source, $dest);
 
     } else {
-        logAction($_SESSION['user_id'], "COPY", $file['path'] . "/" . $file['name'] . " -> " . $targetPath);
+        logAction($_SESSION['user_id'], "COPY", $sourcePath . "/" . $name . " -> " . $targetPath);
 
         copyRecursive($source, $dest);
     }

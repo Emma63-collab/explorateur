@@ -2,6 +2,7 @@
 require_once __DIR__ . '/config/cors.php';
 require_once __DIR__ . '/auth/auth.php';
 require_once __DIR__ . '/config/database.php';
+require_once __DIR__ . '/utils/mailer.php';
 
 if (!isLoggedIn()) {
     http_response_code(401);
@@ -20,6 +21,15 @@ $id   = (int)($data['id'] ?? 0);
 
 if ($id <= 0) {
     echo json_encode(['success' => false, 'message' => 'ID utilisateur invalide']);
+    exit;
+}
+
+$userStmt = $pdo->prepare("SELECT id, username, email, role_id, status FROM users WHERE id = ? LIMIT 1");
+$userStmt->execute([$id]);
+$user = $userStmt->fetch();
+if (!$user) {
+    http_response_code(404);
+    echo json_encode(['success' => false, 'message' => 'Utilisateur introuvable']);
     exit;
 }
 
@@ -67,7 +77,18 @@ if ($stmt->execute($binds)) {
         $log->execute([$currentUser, $action, "user_id:$id"]);
     }
 
-    echo json_encode(['success' => true, 'message' => 'Utilisateur mis à jour']);
+    $changes = [];
+    if (isset($data['status']) && $status === 'active' && $user['status'] === 'pending') {
+        $changes[] = 'approved';
+    }
+    if (isset($data['status']) && $status === 'blocked' && $user['status'] !== 'blocked') {
+        $changes[] = 'blocked';
+    }
+    if (isset($data['role']) && (int) $user['role_id'] !== $roleMap[$roleName]) {
+        $changes['role'] = roleName($roleMap[$roleName]);
+    }
+    $notification = $changes ? sendMailtrapNotification($user['email'], $user['username'], $changes) : null;
+    echo json_encode(['success' => true, 'message' => 'Utilisateur mis à jour', 'email_notification' => $notification]);
 } else {
     echo json_encode(['success' => false, 'message' => 'Erreur lors de la mise à jour']);
 }

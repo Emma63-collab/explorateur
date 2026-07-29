@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/env.php';
 /*
  * Headers CORS centralisés.
  * À inclure EN PREMIER dans chaque fichier PHP exposé.

@@ -17,12 +17,18 @@ if (!isAdmin()) {
 
 $data     = json_decode(file_get_contents('php://input'), true);
 $username = trim($data['username'] ?? '');
+$email    = trim($data['email'] ?? '');
 $password = trim($data['password'] ?? '');
 $role     = $data['role'] ?? 'lecteur';
 
 // Validation
-if ($username === '' || $password === '') {
-    echo json_encode(['success' => false, 'message' => 'Nom d\'utilisateur et mot de passe requis']);
+if ($username === '' || $email === '' || $password === '') {
+    echo json_encode(['success' => false, 'message' => 'Nom d\'utilisateur, e-mail et mot de passe requis']);
+    exit;
+}
+
+if (!filter_var($email, FILTER_VALIDATE_EMAIL) || strlen($email) > 254) {
+    echo json_encode(['success' => false, 'message' => 'Adresse e-mail invalide']);
     exit;
 }
 
@@ -45,10 +51,10 @@ if (!array_key_exists($role, $roleMap)) {
 $role_id = $roleMap[$role];
 
 // Vérifier unicité
-$stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? LIMIT 1");
-$stmt->execute([$username]);
+$stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1");
+$stmt->execute([$username, $email]);
 if ($stmt->fetch()) {
-    echo json_encode(['success' => false, 'message' => 'Ce nom d\'utilisateur est déjà pris']);
+    echo json_encode(['success' => false, 'message' => 'Ce nom d\'utilisateur ou cette adresse e-mail est déjà utilisé']);
     exit;
 }
 
@@ -56,10 +62,10 @@ $hashed = password_hash($password, PASSWORD_DEFAULT);
 
 // Créé par l'admin → directement actif
 $stmt = $pdo->prepare(
-    "INSERT INTO users (username, password, role_id, status) VALUES (?, ?, ?, 'active')"
+    "INSERT INTO users (username, email, password, role_id, status) VALUES (?, ?, ?, ?, 'active')"
 );
 
-if ($stmt->execute([$username, $hashed, $role_id])) {
+if ($stmt->execute([$username, $email, $hashed, $role_id])) {
     $newId = $pdo->lastInsertId();
 
     // Journaliser

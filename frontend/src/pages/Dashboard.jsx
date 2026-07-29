@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../icons.jsx";
-import { API } from "../config.js";
+import { api } from "../api/client.js";
 
 const EXT_COLORS = {
   pdf:"#ef4444", png:"#8b5cf6", jpg:"#8b5cf6", jpeg:"#8b5cf6",
@@ -43,10 +43,9 @@ export default function Dashboard({ onEnter, username, role }) {
   useEffect(() => {
     (async () => {
       try {
-        const res  = await fetch(`${API}/dashboard.php`, { credentials:"include" });
-        const json = await res.json();
+        const json = await api.dashboard();
         if (json.success) setData(json);
-      } catch {}
+      } catch { /* on laisse "loading" gérer l'état ; simple échec réseau */ }
       finally { setLoading(false); }
     })();
   }, []);

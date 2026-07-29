@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/env.php';
 /*
  * Connexion base de données — PDO unique
  * Les credentials sont lus depuis les variables d'environnement.

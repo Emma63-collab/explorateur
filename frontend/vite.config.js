@@ -5,7 +5,9 @@ export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const base =
     command === 'build'
-      ? (env.VITE_BASE || '/explorateur/frontend/dist/')
+      // Chemins relatifs par défaut : le build fonctionne quel que soit
+      // le nom du dossier dans lequel il est déployé.
+      ? (env.VITE_BASE || './')
       : '/'
 
   return {

@@ -52,6 +52,7 @@ $usersStmt = $pdo->query("
     SELECT
         u.id,
         u.username,
+        u.email,
         u.role_id,
         CASE
             WHEN u.role_id = 1 THEN 'admin'

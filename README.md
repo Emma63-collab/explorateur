@@ -57,25 +57,32 @@ cd explorateur
 
 ### 4. Configurer l’URL de l’API (important)
 
-Le frontend ne contient **plus de chemin en dur** : l’URL du backend se règle dans **`frontend/.env`**.
+Le frontend ne contient **plus aucun chemin en dur** vers le backend : l’URL est lue dans un fichier JSON, **`frontend/public/config.json`**, chargé au démarrage de la page (pas au moment du build).
 
-1. Copie le modèle s’il n’existe pas encore :
-```bash
-cd frontend
-copy .env.example .env
+**Pourquoi un JSON et pas juste `.env` ?** Un `.env` (`VITE_API_URL`) est figé dans le code au moment de `npm run build`. Le JSON, lui, se modifie **après** le build, directement sur la machine cible, sans rien recompiler : il suffit de recharger la page.
+
+1. Au premier `npm install` / `npm run dev` / `npm run build`, le fichier est **créé automatiquement** (script `scripts/ensure-config.mjs`) à partir de `frontend/public/config.example.json`, avec la valeur XAMPP par défaut. Rien à faire si cette valeur convient déjà.
+2. Si ton installation XAMPP est différente, ouvre `frontend/public/config.json` et adapte `api.baseUrl` :
+
+```json
+{
+  "api": {
+    "baseUrl": "http://localhost/explorateur/backend"
+  }
+}
 ```
-*(Sous Linux/Mac : `cp .env.example .env`)*
 
-2. Adapte `VITE_API_URL` selon ton installation XAMPP :
-
-| Situation | Valeur de `VITE_API_URL` |
+| Situation | Valeur de `api.baseUrl` |
 |-----------|--------------------------|
 | Dossier `htdocs/explorateur/`, Apache **port 80** (défaut classique) | `http://localhost/explorateur/backend` |
 | Dossier à la **racine** de `htdocs/`, Apache **port 8080** | `http://localhost:8080/backend` |
 | Racine `htdocs/`, Apache **port 80** | `http://localhost/backend` |
 | Dossier `explorateur/`, Apache **port 8080** | `http://localhost:8080/explorateur/backend` |
+| Test sur une VM / autre machine du réseau | `http://<IP de la machine>/explorateur/backend` (voir avertissement plus bas sur les sessions) |
 
-> Après toute modification de `.env`, redémarre `npm run dev`.
+> Ce fichier n’est **jamais commité sur Git** (il est dans `.gitignore`, car il dépend de chaque machine). Chaque personne garde sa propre version locale. Il suffit de **recharger la page** après modification — pas besoin de relancer `npm run dev` ni de rebuild.
+
+> `frontend/.env` (`VITE_API_URL`) existe toujours mais n’est plus qu’un **repli** : il n’est utilisé que si `config.json` est introuvable.
 
 ### 5. Lancer le frontend
 
@@ -101,7 +108,7 @@ VITE ready
 | **Backend (Apache/XAMPP)** | `80` (souvent `8080` selon la machine) | Panneau XAMPP / `httpd.conf` |
 | **MySQL** | `3306` | XAMPP |
 
-> Si Apache écoute sur le **port 8080**, l’API n’est **pas** sur `http://localhost/...` mais sur `http://localhost:8080/...`. Il faut alors mettre à jour `VITE_API_URL` dans `frontend/.env`.
+> Si Apache écoute sur le **port 8080**, l’API n’est **pas** sur `http://localhost/...` mais sur `http://localhost:8080/...`. Il faut alors mettre à jour `api.baseUrl` dans `frontend/public/config.json`.
 
 ### 6. Se connecter
 
@@ -127,6 +134,7 @@ explorateur/
 │   ├── auth/auth.php             ← Authentification & sessions
 │   ├── config/
 │   │   ├── database.php          ← Connexion MySQL (à modifier si besoin)
+│   │   ├── session.php           ← Démarrage de session centralisé (cookie SameSite)
 │   │   └── cors.php              ← Headers CORS
 │   ├── permissions/
 │   │   ├── requireLogin.php      ← Vérifie la connexion
@@ -152,10 +160,17 @@ explorateur/
 │   └── admin_*.php
 │
 ├── 📁 frontend/                  ← Interface React.js (port 5173)
-│   ├── .env.example              ← Modèle de config API (à copier en .env)
-│   ├── .env                      ← URL de l'API (non versionné, local)
+│   ├── .env.example              ← Modèle de repli (VITE_API_URL), voir config.json
+│   ├── .env                      ← Repli, non versionné, local
+│   ├── scripts/
+│   │   └── ensure-config.mjs     ← Crée public/config.json au 1er dev/build si absent
+│   ├── public/
+│   │   ├── config.json           ← ★ URL de l'API (non versionné, à éditer localement)
+│   │   └── config.example.json   ← Modèle versionné, avec des exemples
 │   ├── src/
-│   │   ├── config.js             ← Variable globale API (lit VITE_API_URL)
+│   │   ├── config.js             ← Charge public/config.json au runtime
+│   │   ├── api/
+│   │   │   └── client.js         ← ★ Client API unique (api.login(), api.getFiles()...)
 │   │   ├── App.jsx               ← Explorateur principal
 │   │   ├── App.css               ← Styles + thème sombre
 │   │   ├── icons.jsx             ← Bibliothèque d'icônes SVG
@@ -177,18 +192,25 @@ explorateur/
 
 ## Configuration de l’API (frontend)
 
-Toute l’application React lit l’URL du backend via une **variable unique** :
+Toute l’application React appelle le backend via un **client API unique** : `frontend/src/api/client.js`. Aucun composant n’écrit `fetch("http://...")` ni ne connaît un chemin de route — on appelle par exemple `api.login(user, pass)`, `api.getFiles(path)`, `api.upload(file, path)`, etc. Si une route change côté PHP, c’est le **seul fichier** à corriger.
 
-- Fichier : `frontend/.env` (copié depuis `frontend/.env.example`)
-- Variable : `VITE_API_URL`
-- Utilisation dans le code : `frontend/src/config.js` → `export const API`
+L’URL de base de l’API, elle, vient d’un seul endroit :
 
-Il n’est **plus nécessaire** de chercher/remplacer `explorateur/` dans les fichiers source. Un seul réglage suffit pour adapter le projet à un autre dossier ou un autre port Apache.
+- Fichier : `frontend/public/config.json` (créé automatiquement depuis `config.example.json`, voir étape 4 plus haut)
+- Chargé au runtime par `frontend/src/config.js` (une seule fois, avant l’affichage — voir `main.jsx`)
+- Repli si absent : `VITE_API_URL` dans `frontend/.env`, puis une valeur par défaut codée en dur
 
-Exemple pour un collègue qui lance Apache sur le port **8080** à la racine de `htdocs` :
+Il n’est **plus nécessaire** de chercher/remplacer `explorateur/` dans les fichiers source, ni de reconstruire le projet : un seul fichier JSON, modifiable même après un `npm run build`, suffit pour adapter le projet à un autre dossier, un autre port Apache, ou une autre machine.
+
+Exemple pour un collègue qui lance Apache sur le port **8080** à la racine de `htdocs` — il édite juste `frontend/public/config.json` :
+
+```json
+{ "api": { "baseUrl": "http://localhost:8080/backend" } }
+```
+
+et, pour un build de prod, adapte aussi `VITE_BASE` dans `.env` avant de compiler :
 
 ```env
-VITE_API_URL=http://localhost:8080/backend
 VITE_BASE=/
 ```
 
@@ -196,6 +218,10 @@ VITE_BASE=/
 > Le `VITE_BASE` du build ne correspond pas à l’URL Apache.  
 > Pour ce projet : `VITE_BASE=/explorateur/frontend/dist/` puis `npm run build`.  
 > En développement, préfère `npm run dev` → `http://localhost:5173` (pas le dossier `dist/`).
+
+> **Test interplateforme (VM Linux, autre machine du réseau)**  
+> Le backend PHP n’a aucun chemin Windows en dur (`__DIR__` est utilisé partout), donc il tourne tel quel sous Linux (XAMPP/LAMP). Point de vigilance si tu testes le frontend et le backend sur des ports différents :
+> `config.json` doit pointer vers l’IP/le port réels du backend, pas `localhost`, si tu accèdes depuis une autre machine. La session PHP utilise `SameSite=Lax` (`backend/config/session.php`), ce qui suffit tant que frontend et backend sont sur le **même hôte** (même nom/IP), même à des ports différents — c’est le cas normal ici. `SameSite=None` + HTTPS ne serait utile que si frontend et backend étaient un jour sur deux **noms d’hôte** réellement distincts.
 
 ---
 
@@ -231,6 +257,14 @@ Tu peux les définir dans un fichier `.env` à la racine du projet, ou modifier 
 
 ---
 
+## Notifications e-mail (Mailtrap)
+
+Les notifications sont envoyées uniquement lors de la validation d'un compte, d'un changement de rôle ou du blocage d'un compte. Elles vont dans la boîte de test Mailtrap, jamais aux destinataires réels.
+
+1. Exécute `database/002_add_user_email.sql` une fois si la base existe déjà.
+2. Copie `.env.example` vers `.env` à la racine, puis renseigne `MAILTRAP_USERNAME` et `MAILTRAP_PASSWORD` depuis ta boîte Mailtrap Sandbox.
+3. Redémarre Apache. Si Mailtrap n'est pas configuré ou joignable, l'action d'administration reste appliquée et l'interface l'indique.
+
 ## Fonctionnalités
 
 - 🔐 Authentification sécurisée (sessions PHP, mots de passe hashés bcrypt)
@@ -255,14 +289,18 @@ Tu peux les définir dans un fichier `.env` à la racine du projet, ou modifier 
 
 **❌ Page blanche après connexion / impossible de joindre l’API**
 → Vérifier que XAMPP tourne (Apache + MySQL démarrés)
-→ Vérifier `VITE_API_URL` dans `frontend/.env` (doit correspondre au dossier **et** au port Apache)
+→ Vérifier `api.baseUrl` dans `frontend/public/config.json` (doit correspondre au dossier **et** au port Apache)
 → Tester dans le navigateur l’URL de ton API + `/me.php`  
   (ex. `http://localhost/explorateur/backend/me.php` ou `http://localhost:8080/backend/me.php`)
-→ Redémarrer `npm run dev` après modification du `.env`
+→ Recharger simplement la page après modification de `config.json` (pas besoin de relancer `npm run dev`)
+
+**❌ Connexion "réussie" mais aussitôt déconnecté / session qui ne persiste pas**
+→ Vérifie que `backend/config/session.php` existe et que `login.php`/`me.php`/`files.php`... passent bien par lui (directement ou via `auth/auth.php`). Le cookie utilise `SameSite=Lax`, ce qui fonctionne tant que frontend et backend sont accédés depuis le **même hôte** (`localhost` des deux côtés, ou la même IP des deux côtés) — ne pas mélanger `localhost` d'un côté et `127.0.0.1`/une IP de l'autre.
+→ ⚠️ Ne mets jamais `SameSite=None` sans `Secure` (HTTPS) : Firefox refuse purement et simplement de poser ce cookie, et Chrome ne l'accepte que sur l'hôte exact `localhost` — ça casse complètement la session (déjà vécu sur ce projet, cf. commentaire dans `session.php`).
 
 **❌ "Non connecté" ou erreur sur la prévisualisation**
 → Vérifier que Apache est démarré
-→ Vérifier le port Apache (80 ou 8080) et `VITE_API_URL`
+→ Vérifier le port Apache (80 ou 8080) et `api.baseUrl` dans `config.json`
 
 **❌ Erreur lors de l'import SQL (limite d'index)**
 → Utiliser uniquement `database/schema.sql` (les anciens fichiers sont obsolètes)

@@ -40,20 +40,23 @@ ON DUPLICATE KEY UPDATE
 CREATE TABLE IF NOT EXISTS users (
   id         INT UNSIGNED     NOT NULL AUTO_INCREMENT,
   username   VARCHAR(50)      NOT NULL,
+  email      VARCHAR(254)     NOT NULL,
   password   VARCHAR(255)     NOT NULL,
   role_id    TINYINT          NOT NULL DEFAULT 2,
   status     ENUM('pending','active','blocked') NOT NULL DEFAULT 'active',
   created_at DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY username (username)
+  UNIQUE KEY username (username),
+  UNIQUE KEY email (email)
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_general_ci;
 
 -- Compte admin par défaut — identifiant : admin / mot de passe : admin123
-INSERT INTO users (username, password, role_id, status) VALUES
-  ('admin', '$2y$10$rLngytsuuGPG08L8UudTm.YYqjhJiBKQZY8Wh7x6kciBav1XmQ4/e', 1, 'active')
+INSERT INTO users (username, email, password, role_id, status) VALUES
+  ('admin', 'admin@example.test', '$2y$10$rLngytsuuGPG08L8UudTm.YYqjhJiBKQZY8Wh7x6kciBav1XmQ4/e', 1, 'active')
 ON DUPLICATE KEY UPDATE
+  email = VALUES(email),
   password = VALUES(password),
   role_id  = VALUES(role_id),
   status   = VALUES(status);

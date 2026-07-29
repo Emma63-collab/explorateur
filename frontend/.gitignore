@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Config spécifique à chaque machine (URL de l'API) — ne JAMAIS commiter.
+# Chaque personne édite public/config.json localement.
+# public/config.example.json (le modèle) reste versionné.
+public/config.json

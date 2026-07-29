@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { API } from "./config.js";
+import { api } from "./api/client.js";
 
 export default function Login({ onLoginSuccess }) {
   const [username, setUsername] = useState("");
@@ -15,14 +15,7 @@ export default function Login({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API}/login.php`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
-
-      const data = await res.json();
+      const data = await api.login(username, password);
 
       if (!data.success) {
         setError(data.message || "Erreur de connexion");
@@ -37,7 +30,7 @@ export default function Login({ onLoginSuccess }) {
       });
 
     } catch (err) {
-      setError("Erreur réseau");
+      setError(err.message || "Erreur réseau");
     } finally {
       setLoading(false);
     }

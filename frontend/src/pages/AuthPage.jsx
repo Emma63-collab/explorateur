@@ -1,10 +1,11 @@
 import { useState } from "react";
 import "./AuthPage.css";
-import { API } from "../config.js";
+import { api } from "../api/client.js";
 
 export default function AuthPage({ onLoginSuccess }) {
   const [mode, setMode] = useState("login");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -27,19 +28,9 @@ export default function AuthPage({ onLoginSuccess }) {
     setLoading(true);
 
     try {
-      const url =
-        mode === "login"
-          ? `${API}/login.php`
-          : `${API}/register.php`;
-
-      const res = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await res.json();
+      const data = mode === "login"
+        ? await api.login(username, password)
+        : await api.register(username, email, password);
 
       if (!data.success) {
         showMessage(data.message || "Une erreur est survenue.", "error");
@@ -140,6 +131,19 @@ export default function AuthPage({ onLoginSuccess }) {
             disabled={loading}
             autoComplete="username"
           />
+
+          {!isLogin && <>
+            <label htmlFor="auth-email">Adresse e-mail</label>
+            <input
+              id="auth-email"
+              type="email"
+              placeholder="nom@exemple.fr"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              autoComplete="email"
+            />
+          </>}
 
           <label htmlFor="auth-password">Mot de passe</label>
           <div className="password-field">

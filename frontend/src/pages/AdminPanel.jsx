@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Icon } from "../icons.jsx";
-import { API } from "../config.js";
+import { api } from "../api/client.js";
 
 /* ── Helpers ── */
 function formatBytes(bytes) {
@@ -60,7 +60,7 @@ export default function AdminPanel({ onClose }) {
 
   /* Création utilisateur */
   const [showCreate, setShowCreate] = useState(false);
-  const [newUser, setNewUser] = useState({ username:"", password:"", role:"lecteur" });
+  const [newUser, setNewUser] = useState({ username:"", email:"", password:"", role:"lecteur" });
   const [creating, setCreating] = useState(false);
 
   const showMsg = (msg, type="success") => {
@@ -70,8 +70,7 @@ export default function AdminPanel({ onClose }) {
 
   const load = async () => {
     try {
-      const res  = await fetch(`${API}/admin_summary.php`, { credentials:"include" });
-      const json = await res.json();
+      const json = await api.admin.summary();
       if (!json.success) { setError(json.message || "Chargement impossible."); return; }
       setData(json);
     } catch { setError("Impossible de joindre le backend."); }
@@ -128,14 +127,9 @@ export default function AdminPanel({ onClose }) {
   /* Actions admin */
   const approveUser = async (id, role = "lecteur") => {
     try {
-      const res  = await fetch(`${API}/admin_approve_user.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id, role, status:"active" })
-      });
-      const json = await res.json();
+      const json = await api.admin.approveUser(id, { role, status:"active" });
       if (json.success) {
-        showMsg("Compte validé et rôle attribué");
+        showMsg(json.email_notification && !json.email_notification.sent ? "Compte validé, mais e-mail non envoyé" : "Compte validé et rôle attribué", json.email_notification && !json.email_notification.sent ? "error" : "success");
         setData(d => ({ ...d, users: d.users.map(u => u.id===id ? {...u, status:"active", role} : u) }));
       } else showMsg(json.message ?? "Erreur", "error");
     } catch { showMsg("Erreur réseau", "error"); }
@@ -143,14 +137,9 @@ export default function AdminPanel({ onClose }) {
 
   const changeRole = async (id, role) => {
     try {
-      const res  = await fetch(`${API}/admin_approve_user.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id, role })
-      });
-      const json = await res.json();
+      const json = await api.admin.setRole(id, role);
       if (json.success) {
-        showMsg("Rôle mis à jour");
+        showMsg(json.email_notification && !json.email_notification.sent ? "Rôle mis à jour, mais e-mail non envoyé" : "Rôle mis à jour", json.email_notification && !json.email_notification.sent ? "error" : "success");
         setData(d => ({ ...d, users: d.users.map(u => u.id===id ? {...u, role} : u) }));
       } else showMsg(json.message ?? "Erreur", "error");
     } catch { showMsg("Erreur réseau", "error"); }
@@ -158,14 +147,9 @@ export default function AdminPanel({ onClose }) {
 
   const blockUser = async (id, block) => {
     try {
-      const res  = await fetch(`${API}/admin_approve_user.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id, status: block ? "blocked" : "active" })
-      });
-      const json = await res.json();
+      const json = await api.admin.setBlocked(id, block);
       if (json.success) {
-        showMsg(block ? "Compte bloqué" : "Compte réactivé");
+        showMsg(json.email_notification && !json.email_notification.sent ? "Compte mis à jour, mais e-mail non envoyé" : (block ? "Compte bloqué" : "Compte réactivé"), json.email_notification && !json.email_notification.sent ? "error" : "success");
         setData(d => ({ ...d, users: d.users.map(u => u.id===id ? {...u, status: block?"blocked":"active"} : u) }));
       } else showMsg(json.message ?? "Erreur", "error");
     } catch { showMsg("Erreur réseau", "error"); }
@@ -173,12 +157,7 @@ export default function AdminPanel({ onClose }) {
 
   const deleteUser = async (id) => {
     try {
-      const res  = await fetch(`${API}/admin_delete_user.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ id })
-      });
-      const json = await res.json();
+      const json = await api.admin.deleteUser(id);
       if (json.success) {
         showMsg("Compte supprimé");
         setData(d => ({ ...d, users: d.users.filter(u => u.id !== id) }));
@@ -188,19 +167,14 @@ export default function AdminPanel({ onClose }) {
   };
 
   const createUser = async () => {
-    if (!newUser.username.trim() || !newUser.password.trim()) return;
+    if (!newUser.username.trim() || !newUser.email.trim() || !newUser.password.trim()) return;
     setCreating(true);
     try {
-      const res  = await fetch(`${API}/admin_create_user.php`, {
-        method:"POST", credentials:"include",
-        headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(newUser)
-      });
-      const json = await res.json();
+      const json = await api.admin.createUser(newUser);
       if (json.success) {
         showMsg("Compte créé");
         setShowCreate(false);
-        setNewUser({ username:"", password:"", role:"lecteur" });
+        setNewUser({ username:"", email:"", password:"", role:"lecteur" });
         load();
       } else showMsg(json.message ?? "Erreur", "error");
     } catch { showMsg("Erreur réseau", "error"); }
@@ -251,13 +225,23 @@ export default function AdminPanel({ onClose }) {
                 onChange={e => setNewUser(u => ({...u, password: e.target.value}))}
               />
             </div>
+            <div style={{flex:"1 1 180px"}}>
+              <label style={{fontSize:11,fontWeight:700,color:"var(--muted)",display:"block",marginBottom:4}}>E-MAIL</label>
+              <input
+                type="email"
+                style={{width:"100%",height:36,padding:"0 10px",border:"1px solid var(--line-strong)",borderRadius:"var(--radius-sm)",fontSize:13,outline:"none",background:"var(--surface)",color:"var(--text)"}}
+                placeholder="nom@exemple.fr"
+                value={newUser.email}
+                onChange={e => setNewUser(u => ({...u, email: e.target.value}))}
+              />
+            </div>
             <div>
               <label style={{fontSize:11,fontWeight:700,color:"var(--muted)",display:"block",marginBottom:4}}>RÔLE</label>
               <select className="role-select" style={{height:36}} value={newUser.role} onChange={e => setNewUser(u => ({...u, role: e.target.value}))}>
                 {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
               </select>
             </div>
-            <button className="btn btn-primary btn-sm" onClick={createUser} disabled={creating || !newUser.username.trim() || !newUser.password.trim()}>
+            <button className="btn btn-primary btn-sm" onClick={createUser} disabled={creating || !newUser.username.trim() || !newUser.email.trim() || !newUser.password.trim()}>
               <Icon name="check" size={13}/> {creating ? "Création…" : "Créer"}
             </button>
             <button className="btn btn-ghost btn-sm" onClick={() => setShowCreate(false)}>

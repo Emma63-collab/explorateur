@@ -1198,6 +1198,18 @@ mark {
   background: linear-gradient(135deg, #fef3c7, #fde68a);
   border-color: #f59e0b40;
 }
+.grid-card-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 11px;
+}
+.grid-card-thumb-fallback {
+  display: none;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
 
 .grid-card-name {
   width: 100%;
