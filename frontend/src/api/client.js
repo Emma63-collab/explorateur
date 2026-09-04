@@ -103,6 +103,7 @@ export const api = {
   paste: (files, targetPath, mode) => request("/paste.php", { method: "POST", body: { files, targetPath, mode } }),
   deleteFile: (file, path) => request("/delete.php", { method: "POST", body: { file, path } }),
   deleteMultiple: (files, path) => request("/delete_multiple.php", { method: "POST", body: { files, path } }),
+  share: (action, path, extra = {}) => request("/share.php", { method: "POST", body: { action, path, ...extra } }),
 
   /* ── Upload ── */
   upload: uploadWithProgress,

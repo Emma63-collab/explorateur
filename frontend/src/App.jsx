@@ -28,6 +28,8 @@ const formatSize = (bytes) => {
   return `${s.toFixed(1)} ${units[i]}`;
 };
 
+const appHashUrl = (view) => `${window.location.pathname}${window.location.search}#${view}`;
+
 const formatDate = (ts) => {
   if (!ts) return "—";
   return new Date(ts * 1000).toLocaleString("fr-FR", {
@@ -133,6 +135,77 @@ function ConfirmModal({ title, message, confirmLabel = "Confirmer", danger = fal
   );
 }
 
+function ShareModal({ path, onClose, onMessage }) {
+  const [users, setUsers] = useState([]);
+  const [shares, setShares] = useState([]);
+  const [userId, setUserId] = useState("");
+  const [access, setAccess] = useState("read");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true); setError("");
+    try {
+      const data = await api.share("list", path);
+      if (!data.success) throw new Error(data.message);
+      setUsers(data.users); setShares(data.shares);
+    } catch (e) { setError(e.message || "Impossible de charger les partages."); }
+    finally { setLoading(false); }
+  }, [path]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    if (!userId) return;
+    setSaving(true); setError("");
+    try {
+      const data = await api.share("set", path, { user_id: Number(userId), access });
+      if (!data.success) throw new Error(data.message);
+      setUserId(""); await load(); onMessage("Partage enregistré", "success");
+    } catch (e) { setError(e.message || "Impossible d’enregistrer le partage."); }
+    finally { setSaving(false); }
+  };
+
+  const remove = async (id) => {
+    try {
+      const data = await api.share("remove", path, { user_id: id });
+      if (!data.success) throw new Error(data.message);
+      await load(); onMessage("Accès retiré", "success");
+    } catch (e) { setError(e.message || "Impossible de retirer l’accès."); }
+  };
+
+  return (
+    <Modal title={`Partager — ${path.split("/").pop()}`} onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>Fermer</button>}>
+      <p className="share-intro">Enregistrez les personnes associées à ce fichier. Les droits du rôle restent prioritaires : un lecteur consulte, un éditeur peut modifier.</p>
+      {error && <p className="share-error">{error}</p>}
+      <div className="share-form">
+        <select value={userId} onChange={e => setUserId(e.target.value)} disabled={loading || saving} aria-label="Utilisateur">
+          <option value="">Sélectionner un utilisateur</option>
+          {users.map(user => <option key={user.id} value={user.id}>{user.username} — {user.email}</option>)}
+        </select>
+        <select value={access} onChange={e => setAccess(e.target.value)} disabled={loading || saving} aria-label="Niveau de collaboration">
+          <option value="read">Lecture</option>
+          <option value="write">Modification</option>
+        </select>
+        <button className="btn btn-primary" onClick={save} disabled={!userId || saving || loading}>
+          <Icon name="check" size={14}/> {saving ? "Enregistrement…" : "Ajouter"}
+        </button>
+      </div>
+      <div className="share-list">
+        <strong>Personnes ayant accès</strong>
+        {loading ? <p>Chargement…</p> : shares.length === 0 ? <p>Aucun accès partagé pour le moment.</p> : shares.map(share => (
+          <div className="share-row" key={share.user_id}>
+            <div><b>{share.username}</b><span>{share.email}</span></div>
+            <span className="share-badge">{Number(share.can_write) ? "Modification" : "Lecture"}</span>
+            <button className="btn btn-ghost btn-sm" onClick={() => remove(share.user_id)}>Retirer</button>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 /* ─────────────────────────────────────────────
    APP PRINCIPALE
 ───────────────────────────────────────────── */
@@ -202,6 +275,7 @@ function App() {
   /* Modales custom */
   const [promptModal,  setPromptModal]  = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
+  const [shareFile, setShareFile] = useState(null);
 
   /* Vue liste / grille */
   const [viewMode, setViewMode] = useState(() => localStorage.getItem("ef-view") || "list");
@@ -209,6 +283,40 @@ function App() {
 
   /* Click timeout (simple vs double) */
   const [clickTimeout, setClickTimeout] = useState(null);
+
+  const viewRef = useRef({ connected: false, showDashboard: true, showAdmin: false });
+  viewRef.current = { connected, showDashboard, showAdmin };
+
+  const goAccueil = useCallback(() => {
+    setShowAdmin(false);
+    setShowDashboard(true);
+    if (window.history.state?.efView !== "accueil") {
+      window.history.pushState({ efView: "accueil" }, "", appHashUrl("accueil"));
+    }
+  }, []);
+
+  const enterExplorer = useCallback(() => {
+    setShowAdmin(false);
+    setShowDashboard(false);
+    if (window.history.state?.efView !== "fichiers") {
+      window.history.pushState({ efView: "fichiers" }, "", appHashUrl("fichiers"));
+    }
+  }, []);
+
+  const openAdmin = useCallback(() => {
+    setShowAdmin(true);
+    if (window.history.state?.efView !== "admin") {
+      window.history.pushState({ efView: "admin" }, "", appHashUrl("admin"));
+    }
+  }, []);
+
+  const closeAdmin = useCallback(() => {
+    if (window.history.state?.efView === "admin") {
+      window.history.back();
+      return;
+    }
+    setShowAdmin(false);
+  }, []);
 
   /* ── Helpers ── */
   const showToast = useCallback((message, type = "info", duration = 2800) => {
@@ -241,6 +349,53 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { if (connected) fetchFiles("."); }, [connected]);
 
+  /* Restaurer la vue depuis l'historique du navigateur (Accueil / fichiers / admin) */
+  useEffect(() => {
+    if (loadingAuth || !connected) return;
+    const hash = (window.location.hash || "").replace("#", "");
+    const view = window.history.state?.efView || hash;
+    if (view === "fichiers") {
+      setShowDashboard(false);
+      setShowAdmin(false);
+      window.history.replaceState({ efView: "fichiers" }, "", appHashUrl("fichiers"));
+    } else if (view === "admin") {
+      setShowDashboard(false);
+      setShowAdmin(true);
+      window.history.replaceState({ efView: "admin" }, "", appHashUrl("admin"));
+    } else {
+      setShowDashboard(true);
+      setShowAdmin(false);
+      window.history.replaceState({ efView: "accueil" }, "", appHashUrl("accueil"));
+    }
+  }, [connected, loadingAuth]);
+
+  useEffect(() => {
+    const onPop = (e) => {
+      if (!viewRef.current.connected) return;
+      const view = e.state?.efView;
+      if (view === "admin") {
+        setShowDashboard(false);
+        setShowAdmin(true);
+        return;
+      }
+      if (view === "fichiers") {
+        setShowAdmin(false);
+        setShowDashboard(false);
+        return;
+      }
+      if (view === "accueil") {
+        setShowAdmin(false);
+        setShowDashboard(true);
+        return;
+      }
+      window.history.pushState({ efView: "accueil" }, "", appHashUrl("accueil"));
+      setShowAdmin(false);
+      setShowDashboard(true);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   /* ── Context menu close ── */
   const [contextMenu, setContextMenu] = useState(null);
   useEffect(() => {
@@ -265,7 +420,7 @@ function App() {
       fetchFiles, createFolder, goBack, handleDoubleClick, showToast,
       selectedItems, clipboard, currentPath, editingItem,
       confirmModal, promptModal, textEditorOpen, previewFile,
-      showVersions, showAdmin, contextMenu, isEditeur,
+      showVersions, showAdmin, closeAdmin, contextMenu, isEditeur,
     };
   });
 
@@ -360,6 +515,8 @@ function App() {
   const logout = async () => {
     await api.logout();
     setConnected(false); setUserRole(null); setUsername("");
+    setShowAdmin(false); setShowDashboard(true);
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
   };
 
   const pathParts = currentPath === "." ? [] : currentPath.split("/");
@@ -724,6 +881,7 @@ function App() {
     <AuthPage onLoginSuccess={(user) => {
       setConnected(true); setUserRole(user.role); setUsername(user.username);
       setShowDashboard(true);
+      window.history.replaceState({ efView: "accueil" }, "", appHashUrl("accueil"));
     }}/>
   );
 
@@ -732,7 +890,7 @@ function App() {
     <Dashboard
       username={username}
       role={userRole}
-      onEnter={() => setShowDashboard(false)}
+      onEnter={enterExplorer}
     />
   );
 
@@ -756,7 +914,7 @@ function App() {
         </div>
 
         <div className="header-actions">
-          <button className="btn btn-ghost btn-sm" onClick={() => setShowDashboard(true)} title="Tableau de bord">
+          <button className="btn btn-ghost btn-sm" onClick={goAccueil} title="Tableau de bord">
             <Icon name="home" size={14}/> Accueil
           </button>
           <button className="theme-toggle" onClick={toggleTheme} title="Changer de thème">
@@ -771,7 +929,7 @@ function App() {
             </button>
           )}
           {isAdmin && (
-            <button className="btn btn-sm" onClick={() => setShowAdmin(true)}>
+            <button className="btn btn-sm" onClick={openAdmin}>
               <Icon name="admin" size={14}/> Administration
             </button>
           )}
@@ -1319,6 +1477,14 @@ function App() {
                   <button className="ctx-btn" onClick={() => { openPreview(contextMenu.item); setContextMenu(null); }}>
                     <Icon name="eye" size={14}/> Prévisualiser
                   </button>
+                  {isEditeur && contextMenu.item.type !== "folder" && (
+                    <button className="ctx-btn" onClick={() => {
+                      setShareFile(currentPath === "." ? contextMenu.item.name : `${currentPath}/${contextMenu.item.name}`);
+                      setContextMenu(null);
+                    }}>
+                      <Icon name="admin" size={14}/> Partager
+                    </button>
+                  )}
                   {contextMenu.item.type !== "folder" && contextMenu.item.name.endsWith(".txt") && (
                     <button className="ctx-btn" onClick={() => { openTextEditor(contextMenu.item); setContextMenu(null); }}>
                       <Icon name="edit" size={14}/> Modifier
@@ -1502,6 +1668,8 @@ function App() {
         />
       )}
 
+      {shareFile && <ShareModal path={shareFile} onClose={() => setShareFile(null)} onMessage={showToast}/>}
+
       {/* ── BARRE DE STATUT ── */}
       <div className="status-bar">
         <div className="status-cell">
@@ -1564,7 +1732,7 @@ function App() {
       )}
 
       {/* ── ADMIN PANEL ── */}
-      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)}/>}
+      {showAdmin && <AdminPanel onClose={closeAdmin}/>}
 
     </div>
   );

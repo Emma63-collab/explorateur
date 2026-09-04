@@ -194,7 +194,7 @@ export default function AdminPanel({ onClose }) {
             <span>Gestion des utilisateurs, rôles, fichiers et historique</span>
           </div>
           <div className="admin-header-actions">
-            <button className="admin-btn-close" onClick={() => setShowCreate(s => !s)}>
+            <button className="admin-btn-close" onClick={() => setShowCreate(true)}>
               <Icon name="file_new" size={14}/> Créer un compte
             </button>
             <button className="admin-btn-close" onClick={onClose}>
@@ -202,53 +202,6 @@ export default function AdminPanel({ onClose }) {
             </button>
           </div>
         </header>
-
-        {/* FORMULAIRE CRÉATION */}
-        {showCreate && (
-          <div style={{padding:"16px 28px", borderBottom:"1px solid var(--line)", background:"var(--surface-soft)", display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end"}}>
-            <div style={{flex:"1 1 160px"}}>
-              <label style={{fontSize:11,fontWeight:700,color:"var(--muted)",display:"block",marginBottom:4}}>NOM D'UTILISATEUR</label>
-              <input
-                style={{width:"100%",height:36,padding:"0 10px",border:"1px solid var(--line-strong)",borderRadius:"var(--radius-sm)",fontSize:13,outline:"none",background:"var(--surface)",color:"var(--text)"}}
-                placeholder="ex: jean.dupont"
-                value={newUser.username}
-                onChange={e => setNewUser(u => ({...u, username: e.target.value}))}
-              />
-            </div>
-            <div style={{flex:"1 1 160px"}}>
-              <label style={{fontSize:11,fontWeight:700,color:"var(--muted)",display:"block",marginBottom:4}}>MOT DE PASSE</label>
-              <input
-                type="password"
-                style={{width:"100%",height:36,padding:"0 10px",border:"1px solid var(--line-strong)",borderRadius:"var(--radius-sm)",fontSize:13,outline:"none",background:"var(--surface)",color:"var(--text)"}}
-                placeholder="••••••••"
-                value={newUser.password}
-                onChange={e => setNewUser(u => ({...u, password: e.target.value}))}
-              />
-            </div>
-            <div style={{flex:"1 1 180px"}}>
-              <label style={{fontSize:11,fontWeight:700,color:"var(--muted)",display:"block",marginBottom:4}}>E-MAIL</label>
-              <input
-                type="email"
-                style={{width:"100%",height:36,padding:"0 10px",border:"1px solid var(--line-strong)",borderRadius:"var(--radius-sm)",fontSize:13,outline:"none",background:"var(--surface)",color:"var(--text)"}}
-                placeholder="nom@exemple.fr"
-                value={newUser.email}
-                onChange={e => setNewUser(u => ({...u, email: e.target.value}))}
-              />
-            </div>
-            <div>
-              <label style={{fontSize:11,fontWeight:700,color:"var(--muted)",display:"block",marginBottom:4}}>RÔLE</label>
-              <select className="role-select" style={{height:36}} value={newUser.role} onChange={e => setNewUser(u => ({...u, role: e.target.value}))}>
-                {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-              </select>
-            </div>
-            <button className="btn btn-primary btn-sm" onClick={createUser} disabled={creating || !newUser.username.trim() || !newUser.email.trim() || !newUser.password.trim()}>
-              <Icon name="check" size={13}/> {creating ? "Création…" : "Créer"}
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setShowCreate(false)}>
-              <Icon name="close" size={13}/>
-            </button>
-          </div>
-        )}
 
         {/* ÉTATS */}
         {loading && <div className="admin-empty"><div className="spinner"/><span>Chargement…</span></div>}
@@ -469,15 +422,16 @@ export default function AdminPanel({ onClose }) {
                 </div>
                 <div className="admin-chart" style={{gridColumn:"1/-1"}}>
                   <p className="admin-chart-title"><Icon name="file" size={13}/> Synthèse stockage</p>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginTop:8}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:16,marginTop:8}}>
                     {[
                       { label:"Fichiers sur disque", value:data.stats.disk_files,   color:"#10b981" },
                       { label:"Dossiers",            value:data.stats.disk_folders,  color:"#f59e0b" },
+                      { label:"Espace utilisé",      value:formatBytes(data.stats.disk_size), color:"#0f766e" },
                       { label:"Versions archivées",  value:data.stats.versions,      color:"#8b5cf6" },
                       { label:"Actions journalisées",value:data.stats.logs,          color:"#3b82f6" },
                     ].map(s => (
                       <div key={s.label} style={{padding:"16px",borderRadius:"10px",border:"1px solid var(--line)",background:"var(--surface)",textAlign:"center"}}>
-                        <div style={{fontSize:32,fontWeight:900,color:s.color,lineHeight:1}}>{s.value}</div>
+                        <div style={{fontSize:28,fontWeight:900,color:s.color,lineHeight:1.1}}>{s.value}</div>
                         <div style={{fontSize:12,color:"var(--muted)",marginTop:6}}>{s.label}</div>
                       </div>
                     ))}
@@ -487,6 +441,63 @@ export default function AdminPanel({ onClose }) {
             )}
           </div>
         </>)}
+
+        {showCreate && (
+          <div className="admin-suboverlay" onClick={(e) => { e.stopPropagation(); setShowCreate(false); }}>
+            <section className="admin-subpanel" onClick={(e) => e.stopPropagation()} role="dialog" aria-labelledby="create-user-title">
+              <header className="admin-header">
+                <div className="admin-header-text">
+                  <p>Administration</p>
+                  <h2 id="create-user-title">Créer un compte</h2>
+                  <span>Le compte est créé déjà actif, avec le rôle choisi.</span>
+                </div>
+                <button className="admin-btn-close" onClick={() => setShowCreate(false)}>
+                  <Icon name="close" size={14}/> Fermer
+                </button>
+              </header>
+              <div className="admin-create-form">
+                <div>
+                  <label>Nom d'utilisateur</label>
+                  <input
+                    placeholder="ex: jean.dupont"
+                    value={newUser.username}
+                    onChange={e => setNewUser(u => ({...u, username: e.target.value}))}
+                  />
+                </div>
+                <div>
+                  <label>Adresse e-mail</label>
+                  <input
+                    type="email"
+                    placeholder="nom@exemple.fr"
+                    value={newUser.email}
+                    onChange={e => setNewUser(u => ({...u, email: e.target.value}))}
+                  />
+                </div>
+                <div>
+                  <label>Mot de passe</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    value={newUser.password}
+                    onChange={e => setNewUser(u => ({...u, password: e.target.value}))}
+                  />
+                </div>
+                <div>
+                  <label>Rôle</label>
+                  <select className="role-select" value={newUser.role} onChange={e => setNewUser(u => ({...u, role: e.target.value}))}>
+                    {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                </div>
+                <div className="admin-create-actions">
+                  <button className="btn btn-ghost" onClick={() => setShowCreate(false)}>Annuler</button>
+                  <button className="btn btn-primary" onClick={createUser} disabled={creating || !newUser.username.trim() || !newUser.email.trim() || !newUser.password.trim()}>
+                    <Icon name="check" size={13}/> {creating ? "Création…" : "Créer le compte"}
+                  </button>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
 
         {/* TOAST INTERNE */}
         {toast && (

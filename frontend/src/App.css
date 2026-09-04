@@ -1315,6 +1315,97 @@ mark {
 }
 .admin-btn-close:hover { background: rgba(255,255,255,.22); }
 
+/* Partage de fichiers */
+.share-intro { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+.share-error { margin: 0 0 12px; color: var(--danger); font-size: 13px; font-weight: 700; }
+.share-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px auto;
+  gap: 8px;
+  align-items: center;
+}
+.share-form select {
+  width: 100%; height: 38px; padding: 0 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text); font: inherit; font-size: 13px;
+}
+.share-list { margin-top: 22px; }
+.share-list > strong { display: block; margin-bottom: 8px; font-size: 13px; }
+.share-list > p { margin: 0; color: var(--muted); font-size: 13px; }
+.share-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px;
+  align-items: center; padding: 10px 0; border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.share-row b, .share-row span { display: block; }
+.share-row div > span { margin-top: 2px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.share-badge { padding: 4px 8px; border-radius: 99px; background: var(--primary-soft); color: var(--primary-dark); font-size: 11px; font-weight: 800; white-space: nowrap; }
+
+/* Sous-page de création de compte, ouverte depuis l'administration. */
+.admin-suboverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, .48);
+  backdrop-filter: blur(4px);
+  animation: fadeIn .2s both;
+}
+.admin-subpanel {
+  width: min(640px, 100%);
+  margin: auto 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 32px 80px rgba(15, 23, 42, .35);
+  animation: slideUp .3s cubic-bezier(.22, 1, .36, 1) both;
+}
+.admin-create-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 28px;
+}
+.admin-create-form label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.admin-create-form input,
+.admin-create-form select {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.admin-create-form input:focus,
+.admin-create-form select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, .14);
+}
+.admin-create-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
 /* KPIs */
 .admin-kpis {
   display: grid;
@@ -1565,6 +1656,8 @@ mark {
 @media (max-width: 768px) {
   .admin-kpis { grid-template-columns: repeat(2,1fr); }
   .admin-kpi  { border-right: 0; border-bottom: 1px solid var(--line); }
+  .admin-create-form { grid-template-columns: 1fr; }
+  .admin-create-actions { grid-column: auto; }
   .admin-users-head, .admin-users-row { grid-template-columns: 1fr 80px 100px; }
   .admin-users-head span:nth-child(3),
   .admin-users-row  span:nth-child(3) { display: none; }
@@ -1572,6 +1665,20 @@ mark {
   .admin-logs-head span:last-child,
   .admin-logs-row  span:last-child { display: none; }
   .admin-body { padding: 16px; }
+}
+
+@media (max-width: 560px) {
+  .admin-suboverlay { padding: 16px 10px; }
+  .admin-subpanel { margin: 0; }
+  .admin-subpanel .admin-header { align-items: flex-start; padding: 18px; }
+  .admin-subpanel .admin-header-text span { display: block; line-height: 1.45; }
+  .admin-create-form { padding: 20px 18px; }
+  .admin-create-actions { flex-direction: column-reverse; }
+  .admin-create-actions .btn { width: 100%; justify-content: center; }
+  .share-form { grid-template-columns: 1fr; }
+  .share-form .btn { justify-content: center; }
+  .share-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .share-row .btn { grid-column: 1 / -1; justify-content: center; }
 }
 
 /* ============================================================
